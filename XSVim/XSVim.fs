@@ -1416,6 +1416,19 @@ type XSVim() =
                             let line = editor.GetLine editor.CaretLine
                             if line.Length > 0 && editor.CaretColumn >= line.LengthIncludingDelimiter then
                                 editor.CaretOffset <- editor.CaretOffset - 1)
+            let textChanged =
+                editor.TextChanged.Subscribe
+                    (fun textChangeArgs ->
+                        for change in textChangeArgs.TextChanges do
+                            if change.Offset + change.InsertionLength = editor.CaretOffset then
+                                LoggingService.LogDebug (sprintf "changed %A" change.InsertedText.Text))
+
+            //let textChanged =
+                //editor.TextChanging.Subscribe
+                    //(fun textChangeArgs ->
+                        //for change in textChangeArgs.TextChanges do
+                            //if change.Offset = editor.CaretOffset then
+                                //LoggingService.LogDebug (sprintf "changing %A" change.InsertedText.Text))
 
             let documentClosed =
                 IdeApp.Workbench.DocumentClosed.Subscribe
@@ -1423,7 +1436,7 @@ type XSVim() =
                               if editorStates.ContainsKey documentName then
                                   editorStates.Remove documentName |> ignore)
 
-            disposables <- [ caretChanged; documentClosed ]
+            disposables <- [ caretChanged; textChanged; documentClosed ]
 
     override x.KeyPress descriptor =
         match descriptor.ModifierKeys with
