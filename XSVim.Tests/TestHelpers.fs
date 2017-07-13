@@ -118,6 +118,7 @@ module TestHelpers =
         editor.Text <- source.Replace("$", "")
         editor.CaretOffset <- caret-1
         let plugin = new XSVim()
+        plugin.InitializeEvents editor
         let state = Vim.defaultState
         let keyDescriptors = parseKeys keys
         let newState =

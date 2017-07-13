@@ -1381,7 +1381,8 @@ module Vim =
             | Some c, _, _ ->
                 newState.macro |> Option.iter(fun (Macro m) ->
                     macros.[m] <- macros.[m] @ [ typeChar (c |> string) ])
-                { newState with lastAction = newState.lastAction @ [ typeChar (c |> string) ]}
+                //{ newState with lastAction = newState.lastAction @ [ typeChar (c |> string) ]}
+                newState
             | None, Delete, _
             | None, Change, _
             | None, Put _, _
@@ -1394,62 +1395,115 @@ module Vim =
             | _ -> newState
         newState, handled
 
+//type XSVimEvents() =
+    //static let editorStates = Dictionary<string, VimState>()
+    //let mutable disposables : IDisposable list = []
+    //let mutable processingKey = false
+
+    //member x.WireUp(editor:TextEditor) =
+    //    editor.GrabFocus()
+    //    EditActions.SwitchCaretMode editor
+    //    let caretChanged =
+    //        editor.CaretPositionChanged.Subscribe
+    //            (fun _e ->
+    //                if not processingKey then // only interested in mouse clicks
+    //                    let line = editor.GetLine editor.CaretLine
+    //                    if line.Length > 0 && editor.CaretColumn >= line.LengthIncludingDelimiter then
+    //                        editor.CaretOffset <- editor.CaretOffset - 1)
+
+    //    let textChanged =
+    //        editor.TextChanged.Subscribe
+    //            (fun textChangeArgs ->
+    //                for change in textChangeArgs.TextChanges do
+    //                    if change.Offset + change.InsertionLength = editor.CaretOffset then
+    //                        LoggingService.LogDebug (sprintf "changed %A" change.InsertedText.Text))
+
+    //    //let textChanged =
+    //        //editor.TextChanging.Subscribe
+    //            //(fun textChangeArgs ->
+    //                //for change in textChangeArgs.TextChanges do
+    //                    //if change.Offset = editor.CaretOffset then
+    //                        //LoggingService.LogDebug (sprintf "changing %A" change.InsertedText.Text))
+
+    //    let documentClosed =
+    //        IdeApp.Workbench.DocumentClosed.Subscribe
+    //            (fun e -> let documentName = e.Document.Name
+    //                      if editorStates.ContainsKey documentName then
+    //                          editorStates.Remove documentName |> ignore)
+
+    //    disposables <- [ caretChanged; textChanged; documentClosed ]
+
+    //interface IDisposable with
+        //member x.Dispose() =
+            //disposables |> List.iter(fun d -> d.Dispose())
+[<AutoOpen>]
+module state=
+    let editorStates = Dictionary<FilePath, VimState>()
+
 type XSVim() =
     inherit TextEditorExtension()
-    static let editorStates = Dictionary<string, VimState>()
     let mutable disposables : IDisposable list = []
     let mutable processingKey = false
-    member x.FileName = x.Editor.FileName.FullPath.ToString()
+    member x.FileName = x.Editor.FileName
+
+    member x.State = editorStates.[x.FileName]
+
+    member x.InitializeEvents(editor:TextEditor) =
+        //let events = new XSVimEvents()
+        //events.WireUp editor
+        editor.GrabFocus()
+        EditActions.SwitchCaretMode editor
+
+        let textChanged =
+            editor.TextChanged.Subscribe
+                (fun textChangeArgs ->
+                    for change in textChangeArgs.TextChanges do
+                        if change.Offset + change.InsertionLength = editor.CaretOffset then
+                            let (vimState:VimState) = 
+                                change.InsertedText.Text
+                                //|> Seq.iter(fun c -> ())
+                                |> Seq.fold(fun state c ->
+                                               { state with lastAction = state.lastAction @ [ typeChar (c |> string) ]}) x.State
+                            editorStates.[x.FileName] <- vimState
+                            LoggingService.LogDebug (sprintf "changed %A" change.InsertedText.Text))
+
+        disposables <-
+            if IdeApp.Workbench = null then
+                [ textChanged ]
+            else
+                let caretChanged =
+                    editor.CaretPositionChanged.Subscribe
+                        (fun _e ->
+                            if not processingKey then // only interested in mouse clicks
+                                let line = editor.GetLine editor.CaretLine
+                                if line.Length > 0 && editor.CaretColumn >= line.LengthIncludingDelimiter then
+                                    editor.CaretOffset <- editor.CaretOffset - 1)
+
+                let documentClosed =
+                    IdeApp.Workbench.DocumentClosed.Subscribe
+                        (fun e -> let fileName = e.Document.FileName
+                                  if editorStates.ContainsKey fileName then
+                                      editorStates.Remove fileName |> ignore)
+                [ caretChanged; textChanged; documentClosed ]
 
     override x.Initialize() =
         treeViewPads.initialize()
 
         if not (editorStates.ContainsKey x.FileName) then
             editorStates.Add(x.FileName, Vim.defaultState )
-            let editor = x.Editor
-            editor.GrabFocus()
-            EditActions.SwitchCaretMode editor
-            let caretChanged =
-                editor.CaretPositionChanged.Subscribe
-                    (fun _e ->
-                        if not processingKey then // only interested in mouse clicks
-                            let line = editor.GetLine editor.CaretLine
-                            if line.Length > 0 && editor.CaretColumn >= line.LengthIncludingDelimiter then
-                                editor.CaretOffset <- editor.CaretOffset - 1)
-            let textChanged =
-                editor.TextChanged.Subscribe
-                    (fun textChangeArgs ->
-                        for change in textChangeArgs.TextChanges do
-                            if change.Offset + change.InsertionLength = editor.CaretOffset then
-                                LoggingService.LogDebug (sprintf "changed %A" change.InsertedText.Text))
-
-            //let textChanged =
-                //editor.TextChanging.Subscribe
-                    //(fun textChangeArgs ->
-                        //for change in textChangeArgs.TextChanges do
-                            //if change.Offset = editor.CaretOffset then
-                                //LoggingService.LogDebug (sprintf "changing %A" change.InsertedText.Text))
-
-            let documentClosed =
-                IdeApp.Workbench.DocumentClosed.Subscribe
-                    (fun e -> let documentName = e.Document.Name
-                              if editorStates.ContainsKey documentName then
-                                  editorStates.Remove documentName |> ignore)
-
-            disposables <- [ caretChanged; textChanged; documentClosed ]
+            x.InitializeEvents x.Editor
 
     override x.KeyPress descriptor =
         match descriptor.ModifierKeys with
         | ModifierKeys.Control
         | ModifierKeys.Command when descriptor.KeyChar = 'z' ->
             // cmd-z uses the vim undo group
-            let vimState = editorStates.[x.FileName]
-            vimState.undoGroup |> Option.iter(fun d -> d.Dispose())
+            x.State.undoGroup |> Option.iter(fun d -> d.Dispose())
             EditActions.Undo x.Editor
             false
         | ModifierKeys.Command when descriptor.KeyChar <> 'z' && descriptor.KeyChar <> 'r' -> false
         | _ ->
-            let vimState = editorStates.[x.FileName]
+            let vimState = x.State
             let oldState = vimState
 
             processingKey <- true
