@@ -110,6 +110,7 @@ module TestHelpers =
     let test (source:string) (keys:string) =
         FixtureSetup.initialiseMonoDevelop()
         let editor = TextEditorFactory.CreateNewEditor()
+        editor.FileName <- FilePath "test"
         let caret = source.IndexOf "$"
         if caret = 0 then
             failwith "$ can't be the first position. It needs to be after some char."

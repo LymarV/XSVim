@@ -1438,15 +1438,20 @@ module Vim =
             //disposables |> List.iter(fun d -> d.Dispose())
 [<AutoOpen>]
 module state=
-    let editorStates = Dictionary<FilePath, VimState>()
+    let editorStates = new Dictionary<FilePath, VimState>()
 
 type XSVim() =
     inherit TextEditorExtension()
     let mutable disposables : IDisposable list = []
     let mutable processingKey = false
-    member x.FileName = x.Editor.FileName
+    //member x.FileName = x.Editor.FileName
 
-    member x.State = editorStates.[x.FileName]
+    member x.GetState fileName =
+        let s = editorStates
+        if editorStates.Count = 0 then
+            Vim.defaultState
+        else
+            s.[fileName]
 
     member x.InitializeEvents(editor:TextEditor) =
         //let events = new XSVimEvents()
@@ -1459,12 +1464,11 @@ type XSVim() =
                 (fun textChangeArgs ->
                     for change in textChangeArgs.TextChanges do
                         if change.Offset + change.InsertionLength = editor.CaretOffset then
-                            let (vimState:VimState) = 
+                            let vimState = 
                                 change.InsertedText.Text
-                                //|> Seq.iter(fun c -> ())
                                 |> Seq.fold(fun state c ->
-                                               { state with lastAction = state.lastAction @ [ typeChar (c |> string) ]}) x.State
-                            editorStates.[x.FileName] <- vimState
+                                               { state with lastAction = state.lastAction @ [ typeChar (c |> string) ]}) (x.GetState editor.FileName)
+                            editorStates.[editor.FileName] <- vimState
                             LoggingService.LogDebug (sprintf "changed %A" change.InsertedText.Text))
 
         disposables <-
@@ -1489,8 +1493,8 @@ type XSVim() =
     override x.Initialize() =
         treeViewPads.initialize()
 
-        if not (editorStates.ContainsKey x.FileName) then
-            editorStates.Add(x.FileName, Vim.defaultState )
+        if not (editorStates.ContainsKey x.Editor.FileName) then
+            editorStates.Add(x.Editor.FileName, Vim.defaultState )
             x.InitializeEvents x.Editor
 
     override x.KeyPress descriptor =
@@ -1498,12 +1502,13 @@ type XSVim() =
         | ModifierKeys.Control
         | ModifierKeys.Command when descriptor.KeyChar = 'z' ->
             // cmd-z uses the vim undo group
-            x.State.undoGroup |> Option.iter(fun d -> d.Dispose())
+            let vimState = x.GetState x.Editor.FileName
+            vimState.undoGroup |> Option.iter(fun d -> d.Dispose())
             EditActions.Undo x.Editor
             false
         | ModifierKeys.Command when descriptor.KeyChar <> 'z' && descriptor.KeyChar <> 'r' -> false
         | _ ->
-            let vimState = x.State
+            let vimState = x.GetState x.Editor.FileName
             let oldState = vimState
 
             processingKey <- true
@@ -1516,7 +1521,7 @@ type XSVim() =
             | None, Some _ -> IdeApp.Workbench.StatusBar.ShowMessage "recording"
             | _ -> IdeApp.Workbench.StatusBar.ShowReady()
 
-            editorStates.[x.FileName] <- newState
+            editorStates.[x.Editor.FileName] <- newState
             match oldState.mode, newState.mode with
             | InsertMode, InsertMode ->
                 base.KeyPress descriptor
@@ -1532,9 +1537,9 @@ type XSVim() =
         ci.Enabled <- true
         // dirty hack - use the command update handler to switch to insert mode
         // before the inline rename kicks in
-        let state = editorStates.[x.FileName]
+        let state = editorStates.[x.Editor.FileName]
         if state.mode <> InsertMode then
-            editorStates.[x.FileName] <-
+            editorStates.[x.Editor.FileName] <-
                 Vim.switchToInsertMode x.Editor state false
 
     override x.Dispose() =
