@@ -120,16 +120,20 @@ module TestHelpers =
         editor.CaretOffset <- caret-1
         let plugin = new XSVim()
         plugin.InitializeEvents editor
-        let state = Vim.defaultState
+        let state = plugin.GetState editor.FileName
         let keyDescriptors = parseKeys keys
         let newState =
             keyDescriptors
             |> Array.fold(fun state c ->
+                //let state = plugin.get
+                //let state = plugin.GetState editor.FileName
                 let newState, handledKeyPress = Vim.handleKeyPress state c editor
+                //editorStates.[editor.FileName] <- newState
                 printfn "%A" newState
                 printfn "%s" editor.Text
                 if state.mode = InsertMode && c.ModifierKeys <> ModifierKeys.Control && c.SpecialKey <> SpecialKey.Escape then
                     editor.InsertAtCaret (c.KeyChar.ToString())
+                //let newState = plugin.GetState editor.FileName
                 newState) state
 
         let cursor = if newState.mode = InsertMode then "|" else "$"

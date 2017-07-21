@@ -1395,47 +1395,6 @@ module Vim =
             | _ -> newState
         newState, handled
 
-//type XSVimEvents() =
-    //static let editorStates = Dictionary<string, VimState>()
-    //let mutable disposables : IDisposable list = []
-    //let mutable processingKey = false
-
-    //member x.WireUp(editor:TextEditor) =
-    //    editor.GrabFocus()
-    //    EditActions.SwitchCaretMode editor
-    //    let caretChanged =
-    //        editor.CaretPositionChanged.Subscribe
-    //            (fun _e ->
-    //                if not processingKey then // only interested in mouse clicks
-    //                    let line = editor.GetLine editor.CaretLine
-    //                    if line.Length > 0 && editor.CaretColumn >= line.LengthIncludingDelimiter then
-    //                        editor.CaretOffset <- editor.CaretOffset - 1)
-
-    //    let textChanged =
-    //        editor.TextChanged.Subscribe
-    //            (fun textChangeArgs ->
-    //                for change in textChangeArgs.TextChanges do
-    //                    if change.Offset + change.InsertionLength = editor.CaretOffset then
-    //                        LoggingService.LogDebug (sprintf "changed %A" change.InsertedText.Text))
-
-    //    //let textChanged =
-    //        //editor.TextChanging.Subscribe
-    //            //(fun textChangeArgs ->
-    //                //for change in textChangeArgs.TextChanges do
-    //                    //if change.Offset = editor.CaretOffset then
-    //                        //LoggingService.LogDebug (sprintf "changing %A" change.InsertedText.Text))
-
-    //    let documentClosed =
-    //        IdeApp.Workbench.DocumentClosed.Subscribe
-    //            (fun e -> let documentName = e.Document.Name
-    //                      if editorStates.ContainsKey documentName then
-    //                          editorStates.Remove documentName |> ignore)
-
-    //    disposables <- [ caretChanged; textChanged; documentClosed ]
-
-    //interface IDisposable with
-        //member x.Dispose() =
-            //disposables |> List.iter(fun d -> d.Dispose())
 [<AutoOpen>]
 module state=
     let editorStates = new Dictionary<FilePath, VimState>()
@@ -1444,12 +1403,13 @@ type XSVim() =
     inherit TextEditorExtension()
     let mutable disposables : IDisposable list = []
     let mutable processingKey = false
-    //member x.FileName = x.Editor.FileName
 
     member x.GetState fileName =
         let s = editorStates
         if editorStates.Count = 0 then
-            Vim.defaultState
+            let state = Vim.defaultState
+            s.[fileName] <- state
+            state
         else
             s.[fileName]
 
@@ -1470,6 +1430,7 @@ type XSVim() =
                                                { state with lastAction = state.lastAction @ [ typeChar (c |> string) ]}) (x.GetState editor.FileName)
                             editorStates.[editor.FileName] <- vimState
                             LoggingService.LogDebug (sprintf "changed %A" change.InsertedText.Text))
+
 
         disposables <-
             if IdeApp.Workbench = null then
