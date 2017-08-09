@@ -1423,6 +1423,13 @@ type XSVim() =
             editor.TextChanged.Subscribe
                 (fun textChangeArgs ->
                     for change in textChangeArgs.TextChanges do
+                        if change.Offset = editor.CaretOffset && change.RemovalLength > 0 then
+                            let vimState = 
+                                change.RemovedText.Text
+                                |> Seq.fold(fun state c ->
+                                               { state with lastAction = state.lastAction.[.. state.lastAction.Length-1] }) (x.GetState editor.FileName)
+                            editorStates.[editor.FileName] <- vimState
+                            LoggingService.LogDebug (sprintf "changed %A" change.InsertedText.Text)
                         if change.Offset + change.InsertionLength = editor.CaretOffset then
                             let vimState = 
                                 change.InsertedText.Text
