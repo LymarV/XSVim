@@ -46,7 +46,7 @@ module VimHelpers =
             |> List.iter(fun k -> 
                 commands 
                 |> Array.tryFind(fun command -> command.AccelKey = k)
-                |> Option.iter commandManager'.UnregisterCommand)
+                |> Option.iter(fun command -> KeyBindingService.CurrentKeyBindingSet.SetBinding (command, Array.empty)))
 
         | None -> ()
     unregisterConflictingCommands()
