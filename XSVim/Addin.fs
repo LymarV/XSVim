@@ -1,14 +1,13 @@
 ﻿namespace XSVim
+
 open System
-open System.Collections.Generic
 open MonoDevelop.Components.Commands
 open MonoDevelop.Core
-open MonoDevelop.Core.Text
 open MonoDevelop.Ide
 open MonoDevelop.Ide.Editor
 open MonoDevelop.Ide.Editor.Extension
 
-type XSVim() =
+type XSVim() as this =
     inherit TextEditorExtension()
     let mutable disposables : IDisposable list = []
     let mutable processingKey = false
@@ -25,6 +24,10 @@ type XSVim() =
                            } |> Some }
         else
             config <- { insertModeEscapeKey = None }
+
+    let ctrl c =
+        KeyDescriptor.FromGtk(Enum.Parse(typeof<Gdk.Key>, c) :?> Gdk.Key, char c, Gdk.ModifierType.ControlMask)
+        |> this.KeyPress
 
     member x.FileName = x.Editor.FileName.FullPath.ToString()
 
@@ -118,6 +121,38 @@ type XSVim() =
         // before the inline rename kicks in
         if x.State.mode <> InsertMode then
             x.State <- Vim.switchToInsertMode x.Editor x.State false
+
+    // Command handlers for all keys that possibly conflict with
+    // out of the box key binding schemes.
+    [<CommandHandler ("XSVim.HalfPageDown")>]
+    member x.HalfPageDown() = ctrl "d"
+
+    [<CommandHandler ("XSVim.PageDown")>]
+    member x.PageDown() = ctrl "f"
+
+    [<CommandHandler ("XSVim.PageUp")>]
+    member x.PageUp() = ctrl "b"
+
+    [<CommandHandler ("XSVim.FindFile")>]
+    member x.FindFile() = ctrl "p"
+
+    [<CommandHandler ("XSVim.DynamicAbbrev")>]
+    member x.DynamicAbbrev() = ctrl "n"
+
+    [<CommandHandler ("XSVim.NavigateBackwards")>]
+    member x.NavigateBackwards() = ctrl "o"
+
+    [<CommandHandler ("XSVim.NavigateForwards")>]
+    member x.NavigateForwards() = ctrl "p"
+
+    [<CommandHandler ("XSVim.IncrementNumber")>]
+    member x.IncrementNumber() = ctrl "x"
+
+    [<CommandHandler ("XSVim.DecrementNumber")>]
+    member x.DecrementNumber() = ctrl "a"
+
+    [<CommandHandler ("XSVim.Escape")>]
+    member x.Escape() = ctrl "c"
 
     override x.Dispose() =
         base.Dispose()
